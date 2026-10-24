@@ -1,0 +1,119 @@
+# =============================================================================
+# Kiro auto-approve permissions for the `feature-delivery` workflow
+# -----------------------------------------------------------------------------
+# WHERE THIS GOES (Kiro does NOT read it from inside the repo):
+#   User scope (all projects):  ~/.kiro/settings/permissions.yaml
+#   Workspace scope (this repo only, per-user, outside the repo):
+#                               ~/.kiro/workspace-roots/<hash>/permissions.yaml
+#
+# This copy lives in the repo only as a reference to paste from. Writes to
+# .kiro/settings/ and ~/.kiro/workspace-roots/ are HARD-DENIED to the agent by
+# Kiro's security invariants, so it cannot be auto-applied -- paste it yourself,
+# or click "Always allow" on prompts and let Kiro build the equivalent rules.
+#
+# EVALUATION: deny > ask > allow (deny always wins). Creating this file ADDS to
+# Kiro's built-in defaults; it does not replace them.
+#
+# CANNOT BE AUTO-ALLOWED (Kiro invariant -- will still prompt every time):
+#   - writes to .kiro/{agents,hooks,workflows,powers}  (e.g. "Replace in File"
+#     on requirements-analyst.json) -> just click Allow
+#   - writes to .git/**, .vscode/**, *.code-workspace
+# Also: an UNTRUSTED workspace asks before every shell command regardless of
+# rules -- trust the workspace first (Settings / the trust prompt).
+# =============================================================================
+rules:
+  # ---------------------------------------------------------------------------
+  # SILENT ALLOW -- safe, high-frequency operations the run performs constantly
+  # ---------------------------------------------------------------------------
+
+  # Read any workspace file silently
+  - capability: fs_read
+    effect: allow
+
+  # Write the artifacts the run produces. Narrow to the dirs the workflow and
+  # the least-privilege matrix (.kiro/PERMISSIONS.md) actually target.
+  - capability: fs_write
+    effect: allow
+    match:
+      - "fintech-customer-insights/src/**"
+      - "fintech-customer-insights/build/**"
+      - "acceptance-tests/**"
+      - ".agents/**"
+      - "audit/**"
+      - "docs/**"
+    # NOTE: .kiro/{agents,hooks,workflows,powers} writes still PROMPT -- invariant.
+
+  # Build / test / Playwright / probe / inspect / audit -- the full command set
+  # used by test-engineer, wf-coder, api-verifier, and the verification stage.
+  - capability: shell
+    effect: allow
+    match:
+      # build & JVM
+      - "./gradlew *"
+      - "gradle *"
+      - "java *"
+      - "javac *"
+      # node / playwright acceptance tests
+      - "npx *"
+      - "npm *"
+      - "node *"
+      # HTTP smoke probes
+      - "curl *"
+      - "timeout *"
+      # inspection / file plumbing
+      - "ls *"
+      - "cat *"
+      - "find *"
+      - "grep *"
+      - "echo *"
+      - "head *"
+      - "tail *"
+      - "mkdir *"
+      # deterministic audit recorder ONLY -- not arbitrary python
+      - "python3 *tools/audit/*"
+      # git READ-ONLY (preflight, status, diffs)
+      - "git status*"
+      - "git diff*"
+      - "git log*"
+      - "git branch*"
+      - "git remote*"
+      - "git worktree list*"
+
+  # ---------------------------------------------------------------------------
+  # ASK -- governed git WRITE + GitHub stay interactive (never silently allowed).
+  # These are the approval gates the repo's governance mandates. "ask" here is
+  # belt-and-braces: it keeps a prompt even if a broad allow is added later.
+  # ---------------------------------------------------------------------------
+  - capability: shell
+    effect: ask
+    match:
+      - "git add*"
+      - "git commit*"
+      - "git push*"
+      - "git worktree add*"
+      - "gh *"
+
+  # ---------------------------------------------------------------------------
+  # HARD DENY -- destructive / history-rewriting ops are never permitted,
+  # matching the git-governance hard limits.
+  # ---------------------------------------------------------------------------
+  - capability: shell
+    effect: deny
+    match:
+      - "rm -rf *"
+      - "sudo *"
+      - "git push --force*"
+      - "git push -f*"
+      - "git reset --hard*"
+      - "git clean -fd*"
+      - "git branch -D*"
+
+  # Never let the agent write secrets-style files
+  - capability: fs_write
+    effect: deny
+    match:
+      - "**/*.env"
+      - "**/*.env.*"
+      - "**/*.pem"
+      - "**/*.key"
+      - "**/id_rsa*"

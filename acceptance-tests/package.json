@@ -1,0 +1,13 @@
+{
+  "name": "fintech-acceptance-tests",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Deterministic HTTP API acceptance tests (Playwright Test) for fintech-customer-insights. Runs against a locally started app; never against production.",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

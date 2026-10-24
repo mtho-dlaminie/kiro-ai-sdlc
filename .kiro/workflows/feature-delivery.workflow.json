@@ -1,0 +1,127 @@
+{
+  "name": "feature-delivery",
+  "description": "Reusable, governance-aware, auditable AI-SDLC workflow: takes an approved feature from requirements through specification, design, test-first implementation, Playwright API verification, independent review, fail-closed verification, and governed GitHub delivery. Generic across new endpoints, enhancements, aggregations, and bounded backend features. Contains no business-domain rules.",
+  "inputs": {
+    "feature_description": "A feature description, or an issue reference, or inline requirements text.",
+    "spec_file": "Optional absolute path to a pre-written specification/requirements file ('' if none).",
+    "docs_refs": "Optional documentation references ('' if none).",
+    "acceptance_criteria": "Optional acceptance criteria text ('' if none).",
+    "constraints": "Optional constraints ('' if none).",
+    "target_repo": "Absolute path to the target repository/workspace.",
+    "base_branch": "Base integration branch ('' = detect default).",
+    "run_id": "Unique run id for this execution (propagated through all artifacts).",
+    "run_dir": "Absolute audit directory for this run, e.g. <target_repo>/audit/<run_id>.",
+    "docs_dir": "Absolute directory for run docs/artifacts, e.g. <target_repo>/.agents/runs/<run_id>.",
+    "use_worktree": "'true' to isolate work in a git worktree, else 'false'.",
+    "app_dir": "Absolute path to the Spring Boot app module (the Gradle project)."
+  },
+  "steps": [
+    {
+      "type": "step",
+      "id": "preflight",
+      "agent": "wf-planner",
+      "effortLevel": "high",
+      "artifacts": { "preflight": "{{docs_dir}}/preflight.md" },
+      "prompt": "STAGE 1 — Repository Preflight (READ-ONLY; do NOT modify git state).\n\nRun id: {{run_id}}. Target repo: {{target_repo}}. App module: {{app_dir}}. Audit dir: {{run_dir}}. Docs dir: {{docs_dir}}.\n\nFirst, initialize auditing: run\n  python3 {{target_repo}}/tools/audit/record_event.py --run-dir {{run_dir}} --run-id {{run_id}} --type WORKFLOW_STARTED --action \"feature-delivery run started\" --step preflight --agent wf-planner --workflow-version feature-delivery/1\n\nThen inspect (read-only, no writes to git): `git -C {{target_repo}} status`, current branch, working-tree cleanliness, tracked/untracked changes, the default integration branch (prefer {{base_branch}} if provided else detect main/master), local+remote refs (`git branch -a`, `git remote -v`), existing worktrees (`git worktree list`), and relevant repo conventions (read AGENTS.md and .kiro/steering/*). Check whether `gh` is available and authenticated WITHOUT printing any token. Note if the repo is not yet initialized.\n\nWrite a preflight report to {{docs_dir}}/preflight.md covering: repo state, current branch, cleanliness, base branch + its current commit SHA (if the repo exists), remotes, worktrees, gh availability, and any blockers. Then record ENVIRONMENT_VALIDATED via record_event.py with result SUCCESS (or BLOCKED with an errorCategory if something prevents proceeding).\n\nDo NOT create branches, stage, commit, push, or create a PR. Signal send_message success with a one-line summary."
+    },
+    {
+      "type": "step",
+      "id": "requirements",
+      "agent": "requirements-analyst",
+      "artifacts": { "requirements": "{{docs_dir}}/requirements.md" },
+      "prompt": "STAGE 2 — Feature Requirements.\n\nRun id: {{run_id}}. Load the skill 'spec-driven-development' context mentally; your job here is ONLY requirements, not the spec.\n\nInputs:\n- feature_description: {{feature_description}}\n- spec_file (optional): {{spec_file}}\n- docs_refs (optional): {{docs_refs}}\n- acceptance_criteria (optional): {{acceptance_criteria}}\n- constraints (optional): {{constraints}}\n\nIf spec_file is a non-empty path, read it. If feature_description references a GitHub issue and `gh` is available, you MAY read the issue read-only. Otherwise use the inline text. Read AGENTS.md and .kiro/steering/* for repo conventions and the existing app under {{app_dir}} to ground scope.\n\nProduce {{docs_dir}}/requirements.md with: source, numbered REQ-<n> requirements, per-requirement acceptance criteria where derivable, clearly-labelled assumptions, and an explicit list of ambiguities/contradictions/open questions. NEVER invent business rules — unknowns go to open questions.\n\nRecord REQUIREMENTS_RETRIEVED via {{target_repo}}/tools/audit/record_event.py (--artifact {{docs_dir}}/requirements.md). Signal send_message success."
+    },
+    {
+      "type": "step",
+      "id": "specification",
+      "agent": "wf-design",
+      "effortLevel": "high",
+      "artifacts": { "spec": "{{docs_dir}}/spec.md" },
+      "prompt": "STAGE 3 — Specification (apply the 'spec-driven-development' skill).\n\nRun id: {{run_id}}. Read {{docs_dir}}/requirements.md and the existing app under {{app_dir}}.\n\nWrite a structured, versioned specification to {{docs_dir}}/spec.md with ALL sections: business objective; functional scope + explicit exclusions; API contract (method, path, request schema, response schema, validation); business rules and data transformations (exact numeric formulas incl. scale, RoundingMode.HALF_EVEN, currency assumptions); error handling (each error -> HTTP status + RFC 7807 problem shape); security; dependencies (existing services/repositories reused); acceptance criteria each with a stable AC-<n> mapped to REQ-<n>; relevant NFRs; open questions. Put 'Spec version: 1' at the top.\n\nAfter writing, compute its hash and record it: run\n  HASH=$(sha256sum {{docs_dir}}/spec.md | cut -d' ' -f1)\n  python3 {{target_repo}}/tools/audit/record_event.py --run-dir {{run_dir}} --run-id {{run_id}} --type SPECIFICATION_GENERATED --action \"Spec v1 generated\" --step specification --agent wf-design --artifact {{docs_dir}}/spec.md --details \"{\\\"specHash\\\":\\\"$HASH\\\"}\"\n  python3 {{target_repo}}/tools/audit/record_event.py --run-dir {{run_dir}} --run-id {{run_id}} --type APPROVAL_REQUESTED --action \"Request specification approval (Gate 1)\" --step specification --agent wf-design --result PENDING --details \"{\\\"gate\\\":\\\"SPECIFICATION\\\",\\\"specHash\\\":\\\"$HASH\\\"}\"\n\nThen STOP for Human Approval Gate 1: call send_message with severity 'warning' presenting the spec summary + its SHA-256 and asking the human to APPROVE or REQUEST CHANGES. Do not continue until answered. If changes are requested, revise the spec to version N+1, re-record SPECIFICATION_REVISED with the new hash, and request approval again. When approved, record APPROVAL_GRANTED (gate SPECIFICATION) with the approved spec hash via record_approval.py + record_event.py, then signal success. If rejected outright, record APPROVAL_REJECTED and signal error."
+    },
+    {
+      "type": "step",
+      "id": "design",
+      "agent": "wf-design",
+      "effortLevel": "high",
+      "artifacts": { "design": "{{docs_dir}}/design.md" },
+      "prompt": "STAGE 4 — Technical Design (only after the spec was APPROVED in the previous step).\n\nRun id: {{run_id}}. Read {{docs_dir}}/spec.md (approved) and inspect existing implementation patterns under {{app_dir}} (controllers/services/repositories/exception advice) and .kiro/steering/*.\n\nWrite {{docs_dir}}/design.md: components requiring change; reusable functionality; integration boundaries; technical risks; error-handling approach; transaction considerations (if any); test strategy (which unit/controller/integration/Playwright tests); observability. Keep it a concise, actionable implementation plan consistent with existing conventions — do NOT introduce new frameworks or infrastructure without justification.\n\nRecord the design hash and APPROVAL_REQUESTED (gate TECHNICAL_DESIGN) via the audit scripts (same pattern as the spec step). Then STOP for Human Approval Gate 2: send_message severity 'warning' with the design summary + hash, asking APPROVE / REQUEST CHANGES. On approval, record TECHNICAL_DESIGN_APPROVED + APPROVAL_GRANTED (gate TECHNICAL_DESIGN) and signal success. On rejection, revise or record APPROVAL_REJECTED and signal error accordingly."
+    },
+    {
+      "type": "step",
+      "id": "test-design",
+      "agent": "test-engineer",
+      "artifacts": {
+        "traceability": "{{docs_dir}}/traceability-matrix.md",
+        "test_plan": "{{docs_dir}}/test-plan.md"
+      },
+      "prompt": "STAGE 5 — Test Design (derive tests from the APPROVED spec; apply the 'tdd' skill mindset).\n\nRun id: {{run_id}}. Read {{docs_dir}}/spec.md and {{docs_dir}}/design.md.\n\nProduce:\n1. {{docs_dir}}/traceability-matrix.md — a table REQ-ID -> AC-ID -> Test Case (class#method) -> Implementation (planned file) -> Verification status (initially NOT RUN).\n2. {{docs_dir}}/test-plan.md — the planned unit, controller (@WebMvcTest), integration (@SpringBootTest), API-contract, Playwright acceptance, negative, boundary, and security-relevant tests.\n\nDo an independent coverage self-check: every AC must map to at least one test; flag any AC with no planned test. Do NOT write production code. Record TEST_CASES_GENERATED via record_event.py (--artifact {{docs_dir}}/traceability-matrix.md). Signal send_message success with coverage stats (ACs covered / total)."
+    },
+    {
+      "type": "repeat",
+      "id": "tdd-loop",
+      "maxIterations": 8,
+      "onMaxIterations": "pause",
+      "stopCondition": { "fileCheck": { "path": "{{docs_dir}}/tdd-status.json", "jsonPath": "green", "value": true } },
+      "steps": [
+        {
+          "type": "step",
+          "id": "tdd-iterate",
+          "agent": "wf-coder",
+          "prompt": "STAGE 6 — TDD RED -> GREEN -> REFACTOR (apply the 'tdd', 'spring-api', 'engineering-verification' skills).\n\nRun id: {{run_id}}. App module: {{app_dir}}. Read {{docs_dir}}/spec.md, {{docs_dir}}/design.md, {{docs_dir}}/traceability-matrix.md, and {{docs_dir}}/test-plan.md. If {{docs_dir}}/tdd-status.json exists, read it to see which ACs remain.\n\nWork ONE small behaviour (one AC) per the loop, but you may complete several ACs across iterations:\n1. Write/extend a failing test (RED). Run it. Confirm it fails for the RIGHT reason. Record RED_TEST_EXECUTION (result FAILED is expected here — use --result FAILURE with details explaining it is an intended RED) via {{target_repo}}/tools/audit/record_event.py.\n2. Implement the MINIMUM to pass (GREEN). Run tests. Record GREEN_TEST_EXECUTION (--result SUCCESS) with real counts.\n3. Refactor while green; run the regression suite. Record REFACTOR_VERIFICATION.\nNever weaken/delete valid tests. Follow all steering. Do NOT touch git. Do NOT implement anything outside the approved spec.\n\nAfter working, update {{docs_dir}}/traceability-matrix.md verification statuses, and WRITE {{docs_dir}}/tdd-status.json as a JSON object: {\"green\": <true ONLY if ./gradlew build passes AND every AC in the matrix is implemented and covered by a passing test, else false>, \"acsDone\": <n>, \"acsTotal\": <n>, \"lastBuildExit\": <int>, \"tests\": <int>, \"failures\": <int>}. Be honest: set green=false if anything remains or the build is red. If green=false, signal send_message success (the loop will run you again); if green=true, signal success with the final counts."
+        }
+      ]
+    },
+    {
+      "type": "step",
+      "id": "playwright",
+      "agent": "api-verifier",
+      "artifacts": { "playwright_log": "{{docs_dir}}/playwright-run.md" },
+      "prompt": "STAGE 7 — Playwright API Verification (apply the 'playwright-api-testing' skill).\n\nRun id: {{run_id}}. App module: {{app_dir}}. Target repo: {{target_repo}}.\n\nCreate/extend the Playwright Test project under {{target_repo}}/acceptance-tests (package.json with @playwright/test, playwright.config.ts with baseURL http://localhost:8080). Write deterministic HTTP API acceptance tests for the feature's acceptance criteria (status codes, bodies, headers incl. application/problem+json on errors, business assertions, validation failures, negative + boundary cases). These use Playwright Test's request fixture — NOT Playwright MCP (MCP is interactive-UI only).\n\nIf @playwright/test cannot be installed due to network constraints, do NOT fake it: record PLAYWRIGHT_EXECUTION with --result BLOCKED and an errorCategory, write what you attempted to {{docs_dir}}/playwright-run.md, and signal send_message warning so a human can decide. Otherwise: build the app (./gradlew build in {{app_dir}}), start it in the background, wait for readiness, run `npx playwright test`, stop the app. Record PLAYWRIGHT_EXECUTION with the real exit code and per-test PASSED/FAILED counts to {{docs_dir}}/playwright-run.md. Ensure the suite is wired into CI (note how). Signal success if green, error if any test failed."
+    },
+    {
+      "type": "repeat",
+      "id": "review-loop",
+      "maxIterations": 3,
+      "onMaxIterations": "pause",
+      "stopCondition": { "fileCheck": { "path": "{{docs_dir}}/review.json", "jsonPath": "verdict", "value": "APPROVED" } },
+      "steps": [
+        {
+          "type": "step",
+          "id": "remediate",
+          "agent": "wf-coder",
+          "prompt": "STAGE 8a — Review remediation. Run id: {{run_id}}. App module: {{app_dir}}.\n\nIf {{docs_dir}}/review.json does NOT yet exist, this is the first pass: make no changes, just write a one-line note and signal send_message success so the reviewer runs.\n\nIf {{docs_dir}}/review.json exists with verdict REJECTED, read {{docs_dir}}/review.md, address every CRITICAL/HIGH finding (and MEDIUM where reasonable) with real code/test changes, keep all tests green (./gradlew build), never weaken tests, follow steering. Record REVIEW_REMEDIATION via {{target_repo}}/tools/audit/record_event.py with a summary of what you changed. Signal send_message success."
+        },
+        {
+          "type": "step",
+          "id": "review",
+          "agent": "semantic_reviewer",
+          "artifacts": { "review_md": "{{docs_dir}}/review.md", "review_json": "{{docs_dir}}/review.json" },
+          "prompt": "STAGE 8b — Independent Code Review (apply the 'code-review' discipline). Run id: {{run_id}}.\n\nYou are independent of the implementer. Review the feature change against: the original requirements ({{docs_dir}}/requirements.md), the APPROVED spec ({{docs_dir}}/spec.md), and the design ({{docs_dir}}/design.md). Evaluate correctness vs spec, test coverage vs acceptance criteria (passing tests do NOT by themselves prove spec compliance — check the assertions actually bind the ACs), security, maintainability, performance implications, error handling, API consistency, and regression risk. Inspect the diff/code under {{app_dir}} and the tests. You MAY read build/test output but do not need to re-run suites.\n\nWrite a narrative review to {{docs_dir}}/review.md grouped by severity (CRITICAL/HIGH/MEDIUM/LOW) with Problem / Why it matters / Evidence (file:line) / Recommended direction. Then write {{docs_dir}}/review.json EXACTLY as {\"verdict\": \"APPROVED\" | \"REJECTED\", \"critical\": <n>, \"high\": <n>, \"medium\": <n>, \"low\": <n>, \"summary\": \"...\"}. Set verdict APPROVED only if there are zero CRITICAL and zero HIGH findings. Record CODE_REVIEW_FINDINGS via {{target_repo}}/tools/audit/record_event.py with the counts. ALWAYS signal send_message success (your verdict in review.json gates the loop, not your signal)."
+        }
+      ]
+    },
+    {
+      "type": "step",
+      "id": "verification",
+      "agent": "wf-coder",
+      "effortLevel": "high",
+      "artifacts": { "verification": "{{docs_dir}}/verification.json" },
+      "prompt": "STAGE 9 — Final Verification (fail-closed; apply the 'engineering-verification' skill). Run id: {{run_id}}. App module: {{app_dir}}.\n\nExecute and capture REAL commands + exit codes: (1) `./gradlew clean build` in {{app_dir}}; read totals from build/test-results/test/*.xml. (2) If the Playwright suite under {{target_repo}}/acceptance-tests is runnable, run it (start app, run, stop); else mark NOT RUN/BLOCKED with a reason. (3) Runtime smoke: start the app, curl the feature endpoint(s) and record real HTTP status + content-type, stop the app. (4) Regression: confirm the full Java suite is green.\n\nWrite {{docs_dir}}/verification.json with build/tests/playwright/runtime sections, each with command, exitCode, and status in {PASSED,FAILED,NOT_RUN,BLOCKED}. NEVER report an unexecuted check as PASSED. Record a WORKFLOW event appropriate to the outcome and the individual results via {{target_repo}}/tools/audit/record_event.py. If anything required FAILED/BLOCKED, signal send_message error (do not advance to delivery). If all required checks PASSED, signal success with the evidence summary."
+    },
+    {
+      "type": "step",
+      "id": "delivery-prep",
+      "agent": "git-governance",
+      "artifacts": { "delivery": "{{docs_dir}}/delivery.md" },
+      "prompt": "STAGE 10 — Governed Delivery PREPARATION (prepare only; perform NO git writes in this step). Run id: {{run_id}}. Target repo: {{target_repo}}. use_worktree={{use_worktree}}. base_branch={{base_branch}}.\n\nApply the 'git-governance' skill. Produce, in {{docs_dir}}/delivery.md: the full proposed diff summary (modified/added/deleted/untracked files for the feature only), a changed-file list, a reference to the test evidence ({{docs_dir}}/verification.json) and review findings ({{docs_dir}}/review.json), an implementation summary, a proposed branch name + the base branch and its base commit SHA, a suggested commit message, and a ready GitHub PR title + description (requirements summary, implementation summary, tests performed, verification evidence, risks, audit references incl. run_id {{run_id}}). Scan the proposed changes for accidentally exposed secrets and report the result.\n\nRecord DIFF_GENERATED and BRANCH_PROPOSED (gate BRANCH_PROPOSAL, result PENDING) via {{target_repo}}/tools/audit/record_event.py.\n\nThen STOP with send_message severity 'warning': present the branch proposal, the diff summary, and the PR description, and tell the human that the ACTUAL git branch/stage/commit/push/PR operations are performed OUTSIDE this recipe as separately-approved steps (gates BRANCH_PROPOSAL -> DIFF_STAGING -> COMMIT -> PUSH -> PULL_REQUEST), because a single recipe cannot force per-operation OS-credential approval. Ask for the human's decision to proceed to governed delivery. Do not run any git write command here."
+    },
+    {
+      "type": "step",
+      "id": "audit-finalize",
+      "agent": "wf-coder",
+      "artifacts": { "report": "{{run_dir}}/report.html" },
+      "prompt": "STAGE Audit — Finalize evidence (apply the 'audit-evidence' skill). Run id: {{run_id}}. Audit dir: {{run_dir}}. Docs dir: {{docs_dir}}. Target repo: {{target_repo}}.\n\nRecord WORKFLOW_COMPLETED via {{target_repo}}/tools/audit/record_event.py (--result SUCCESS). Then build the evidence manifest over the run artifacts and feature docs:\n  python3 {{target_repo}}/tools/audit/manifest.py --run-dir {{run_dir}} --run-id {{run_id}} {{run_dir}}/events.jsonl {{run_dir}}/approvals.jsonl {{docs_dir}}\nVerify integrity:\n  python3 {{target_repo}}/tools/audit/verify_run.py --run-dir {{run_dir}} --check-manifest\nRender the offline HTML report:\n  python3 {{target_repo}}/tools/audit/render_report.py --run-dir {{run_dir}} --run-id {{run_id}}\nConfirm {{run_dir}}/report.html exists and verify_run exited 0 (report any integrity problems honestly). Signal send_message success with the path to report.html and the integrity result."
+    }
+  ]
+}

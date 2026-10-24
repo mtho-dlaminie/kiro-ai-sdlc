@@ -1,0 +1,30 @@
+# Java / Gradle
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+*.log
+
+# Node / Playwright
+node_modules/
+acceptance-tests/node_modules/
+acceptance-tests/test-results/
+acceptance-tests/playwright-report/
+acceptance-tests/blob-report/
+acceptance-tests/.cache/
+
+# Audit evidence — per-run, not auto-committed (Part 6 requirement)
+audit/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Secrets — never commit
+*.env
+.env
+.env.*
+**/application-local.yml
+**/application-secret.*
