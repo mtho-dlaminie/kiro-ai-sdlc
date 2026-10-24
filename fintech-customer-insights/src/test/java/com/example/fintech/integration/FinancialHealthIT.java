@@ -1,0 +1,156 @@
+package com.example.fintech.integration;
+
+import com.example.fintech.repository.inmemory.DependencyFailureSeam;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestClient;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * RED-phase end-to-end coverage of the financial-health endpoint against the wired app + fixtures.
+ *
+ * <p>Mirrors {@code FinancialOverviewIT}: {@code RANDOM_PORT} + {@code RestClient}, real fixtures,
+ * {@code DependencyFailureSeam} reset in {@link AfterEach}. Asserts the literal serialized JSON
+ * strings (Jackson renders {@code BigDecimal} as strings). Fails until the endpoint is mapped.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class FinancialHealthIT {
+
+    @LocalServerPort
+    private int port;
+
+    @Autowired
+    private DependencyFailureSeam failureSeam;
+
+    private RestClient client() {
+        return RestClient.builder()
+                .baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(status -> true, (req, res) -> { })
+                .build();
+    }
+
+    @AfterEach
+    void resetSeam() {
+        failureSeam.forceFailure(null);
+    }
+
+    @Test
+    void knownCustomerBodyHasAllFields() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-000001/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .contains("\"customerId\"")
+                .contains("\"currency\"")
+                .contains("\"monthlyIncome\"")
+                .contains("\"monthlyExpenses\"")
+                .contains("\"savingsRate\"")
+                .contains("\"debtToIncomeRatio\"")
+                .contains("\"financialHealthScore\"")
+                .contains("\"rating\"")
+                .contains("\"recommendations\"")
+                .contains("\"disclaimer\"");
+    }
+
+    @Test
+    void cust1BodyExactStrings() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-000001/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // Baseline renders BigDecimal as JSON numbers (spec v3 §3.2), not quoted strings.
+        assertThat(response.getBody())
+                .contains("\"monthlyIncome\":2750.75")
+                .contains("\"monthlyExpenses\":45.20")
+                .contains("\"savingsRate\":0.9836")
+                .contains("\"debtToIncomeRatio\":0.4362")
+                .contains("\"currency\":\"GBP\"");
+    }
+
+    @Test
+    void cust1ScoreIs82() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-000001/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getBody())
+                .contains("\"financialHealthScore\":82")
+                .contains("\"rating\":\"EXCELLENT\"");
+    }
+
+    @Test
+    void cust1BodyHasSyntheticDisclaimer() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-000001/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getBody()).containsIgnoringCase("synthetic");
+    }
+
+    @Test
+    void emptyDataCustomerReturns200NotFound() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-000003/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // Baseline renders BigDecimal as JSON numbers (spec v3 §3.2), not quoted strings.
+        assertThat(response.getBody())
+                .contains("\"monthlyIncome\":0.00")
+                .contains("\"monthlyExpenses\":0.00")
+                .contains("\"savingsRate\":0.0000")
+                .contains("\"currency\":\"EUR\"");
+    }
+
+    @Test
+    void unknownCustomerReturns404Problem() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-999999/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void malformedIdReturns400() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/oops/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void dependencyFailureReturns503Problem() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-000004/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    @Test
+    void errorBodiesHaveNoStackTrace() {
+        ResponseEntity<String> response = client().get()
+                .uri("/api/v1/customers/CUST-999999/financial-health")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getBody())
+                .doesNotContain("at com.example.fintech")
+                .doesNotContain("Exception:");
+    }
+
+    @Test
+    void repeatedRequestIsDeterministic() {
+        String first = client().get()
+                .uri("/api/v1/customers/CUST-000001/financial-health")
+                .retrieve().toEntity(String.class).getBody();
+        String second = client().get()
+                .uri("/api/v1/customers/CUST-000001/financial-health")
+                .retrieve().toEntity(String.class).getBody();
+        assertThat(first).isEqualTo(second);
+    }
+}
