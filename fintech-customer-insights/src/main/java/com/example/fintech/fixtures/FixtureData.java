@@ -83,7 +83,13 @@ public class FixtureData {
                         new Transaction("TXN-6001", "ACC-2002", alan.customerId(), money("-850.00"), USD,
                                 TransactionType.DEBIT, "ELECTRONICS", utc(2025, 2, 14), "Laptop"),
                         new Transaction("TXN-6002", "ACC-2001", alan.customerId(), money("1800.00"), USD,
-                                TransactionType.CREDIT, "SALARY", utc(2025, 2, 1), "Payroll")),
+                                TransactionType.CREDIT, "SALARY", utc(2025, 2, 1), "Payroll"),
+                        new Transaction("TXN-6003", "ACC-2001", alan.customerId(), money("-120.00"), USD,
+                                TransactionType.DEBIT, "GROCERIES", utc(2025, 2, 10), "Supermarket"),
+                        new Transaction("TXN-6004", "ACC-2001", alan.customerId(), money("-80.00"), USD,
+                                TransactionType.DEBIT, "GROCERIES", utc(2025, 2, 20), "Grocery run"),
+                        new Transaction("TXN-6005", "ACC-2001", alan.customerId(), money("-200.00"), USD,
+                                TransactionType.DEBIT, "TRANSPORT", utc(2025, 2, 5), "Rail pass")),
                 grace.customerId(), List.of());
 
         this.creditStatusByCustomer = Map.of(
