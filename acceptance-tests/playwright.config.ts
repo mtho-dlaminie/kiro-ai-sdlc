@@ -17,7 +17,9 @@ import { defineConfig } from '@playwright/test';
  * separately). The managed server is never used against a production environment.
  */
 const baseURL = process.env.BASE_URL ?? 'http://localhost:8080';
-const manageServer = !process.env.PW_NO_WEBSERVER;
+// Do not manage the app when running in CI (the workflow starts the jar itself and
+// sets BASE_URL) or when PW_NO_WEBSERVER is set (app started separately).
+const manageServer = !process.env.PW_NO_WEBSERVER && !process.env.CI;
 
 export default defineConfig({
   testDir: './tests',
