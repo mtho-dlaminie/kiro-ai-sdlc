@@ -4,6 +4,7 @@ import com.example.fintech.domain.Account;
 import com.example.fintech.domain.CreditStatus;
 import com.example.fintech.domain.Customer;
 import com.example.fintech.domain.Transaction;
+import com.example.fintech.service.SpendingSummaryService;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -61,6 +62,20 @@ public final class DtoMapper {
                                                       List<Transaction> transactions) {
         List<TransactionResponse> items = transactions.stream().map(DtoMapper::toTransaction).toList();
         return new TransactionsResponse(customerId, from, to, items.size(), items);
+    }
+
+    public static SpendingSummaryResponse toSpendingSummary(String customerId, OffsetDateTime from,
+                                                            OffsetDateTime to, SpendingSummaryService.Result result) {
+        return new SpendingSummaryResponse(
+                customerId,
+                result.currency(),
+                from,
+                to,
+                result.categories(),
+                result.grandTotal(),
+                result.topCategory(),
+                result.debitTransactionCount(),
+                SYNTHETIC_DISCLAIMER);
     }
 
     public static CreditStatusResponse toCreditStatus(CreditStatus creditStatus) {
