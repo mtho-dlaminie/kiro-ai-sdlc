@@ -129,7 +129,7 @@ class FinancialHealthServiceTest {
     @Test
     void composesFourExistingServices() {
         stubCust1();
-        FinancialHealthResponse health = service.getHealth("CUST-000001");
+        FinancialHealthResponse health = service.getHealth("CUST-000001", null, null);
         assertThat(health).isNotNull();
         assertThat(health.customerId()).isEqualTo("CUST-000001");
     }
@@ -137,7 +137,7 @@ class FinancialHealthServiceTest {
     @Test
     void responseContainsAllTenFields() {
         stubCust1();
-        FinancialHealthResponse h = service.getHealth("CUST-000001");
+        FinancialHealthResponse h = service.getHealth("CUST-000001", null, null);
         assertThat(h.customerId()).isEqualTo("CUST-000001");
         assertThat(h.currency()).isNotBlank();
         assertThat(h.monthlyIncome()).isNotNull();
@@ -155,7 +155,7 @@ class FinancialHealthServiceTest {
     @Test
     void incomeAndExpenses_cust1() {
         stubCust1();
-        FinancialHealthResponse h = service.getHealth("CUST-000001");
+        FinancialHealthResponse h = service.getHealth("CUST-000001", null, null);
         assertThat(h.monthlyIncome()).isEqualByComparingTo("2750.75");
         assertThat(h.monthlyIncome().scale()).isEqualTo(2);
         assertThat(h.monthlyExpenses()).isEqualByComparingTo("45.20");
@@ -165,7 +165,7 @@ class FinancialHealthServiceTest {
     @Test
     void incomeAndExpenses_cust2() {
         stubCust2();
-        FinancialHealthResponse h = service.getHealth("CUST-000002");
+        FinancialHealthResponse h = service.getHealth("CUST-000002", null, null);
         assertThat(h.monthlyIncome()).isEqualByComparingTo("1800.00");
         assertThat(h.monthlyExpenses()).isEqualByComparingTo("850.00");
     }
@@ -173,7 +173,7 @@ class FinancialHealthServiceTest {
     @Test
     void incomeAndExpenses_cust3Empty() {
         stubCust3Empty();
-        FinancialHealthResponse h = service.getHealth("CUST-000003");
+        FinancialHealthResponse h = service.getHealth("CUST-000003", null, null);
         assertThat(h.monthlyIncome()).isEqualByComparingTo("0.00");
         assertThat(h.monthlyExpenses()).isEqualByComparingTo("0.00");
     }
@@ -183,19 +183,19 @@ class FinancialHealthServiceTest {
     @Test
     void savingsRate_cust1() {
         stubCust1();
-        assertThat(service.getHealth("CUST-000001").savingsRate()).isEqualByComparingTo("0.9836");
+        assertThat(service.getHealth("CUST-000001", null, null).savingsRate()).isEqualByComparingTo("0.9836");
     }
 
     @Test
     void savingsRate_cust2() {
         stubCust2();
-        assertThat(service.getHealth("CUST-000002").savingsRate()).isEqualByComparingTo("0.5278");
+        assertThat(service.getHealth("CUST-000002", null, null).savingsRate()).isEqualByComparingTo("0.5278");
     }
 
     @Test
     void savingsRate_zeroIncomeIsZero() {
         stubCust3Empty();
-        assertThat(service.getHealth("CUST-000003").savingsRate()).isEqualByComparingTo("0.0000");
+        assertThat(service.getHealth("CUST-000003", null, null).savingsRate()).isEqualByComparingTo("0.0000");
     }
 
     // ---- BR-4 debt-to-income (AC-6) --------------------------------------------------------------
@@ -203,19 +203,19 @@ class FinancialHealthServiceTest {
     @Test
     void dti_cust1() {
         stubCust1();
-        assertThat(service.getHealth("CUST-000001").debtToIncomeRatio()).isEqualByComparingTo("0.4362");
+        assertThat(service.getHealth("CUST-000001", null, null).debtToIncomeRatio()).isEqualByComparingTo("0.4362");
     }
 
     @Test
     void dti_cust2() {
         stubCust2();
-        assertThat(service.getHealth("CUST-000002").debtToIncomeRatio()).isEqualByComparingTo("0.4722");
+        assertThat(service.getHealth("CUST-000002", null, null).debtToIncomeRatio()).isEqualByComparingTo("0.4722");
     }
 
     @Test
     void dti_zeroIncomeZeroDebtIsZero() {
         stubCust3Empty();
-        assertThat(service.getHealth("CUST-000003").debtToIncomeRatio()).isEqualByComparingTo("0.0000");
+        assertThat(service.getHealth("CUST-000003", null, null).debtToIncomeRatio()).isEqualByComparingTo("0.0000");
     }
 
     @Test
@@ -226,7 +226,7 @@ class FinancialHealthServiceTest {
         when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", null, null)).thenReturn(List.of());
         when(creditStatusRepository.findByCustomerId("CUST-000001")).thenReturn(Optional.of(
                 creditStatus("CUST-000001", "0.00", "500.00", GBP)));
-        assertThat(service.getHealth("CUST-000001").debtToIncomeRatio()).isEqualByComparingTo("9.9999");
+        assertThat(service.getHealth("CUST-000001", null, null).debtToIncomeRatio()).isEqualByComparingTo("9.9999");
     }
 
     // ---- BR-5 score (AC-7) -----------------------------------------------------------------------
@@ -234,19 +234,19 @@ class FinancialHealthServiceTest {
     @Test
     void score_cust1Is82() {
         stubCust1();
-        assertThat(service.getHealth("CUST-000001").financialHealthScore()).isEqualTo(82);
+        assertThat(service.getHealth("CUST-000001", null, null).financialHealthScore()).isEqualTo(82);
     }
 
     @Test
     void score_cust2Is54() {
         stubCust2();
-        assertThat(service.getHealth("CUST-000002").financialHealthScore()).isEqualTo(54);
+        assertThat(service.getHealth("CUST-000002", null, null).financialHealthScore()).isEqualTo(54);
     }
 
     @Test
     void score_cust3Is50() {
         stubCust3Empty();
-        assertThat(service.getHealth("CUST-000003").financialHealthScore()).isEqualTo(50);
+        assertThat(service.getHealth("CUST-000003", null, null).financialHealthScore()).isEqualTo(50);
     }
 
     // ---- BR-6 rating + boundaries (AC-8) ---------------------------------------------------------
@@ -254,19 +254,19 @@ class FinancialHealthServiceTest {
     @Test
     void rating_cust1Excellent() {
         stubCust1();
-        assertThat(service.getHealth("CUST-000001").rating()).isEqualTo("EXCELLENT");
+        assertThat(service.getHealth("CUST-000001", null, null).rating()).isEqualTo("EXCELLENT");
     }
 
     @Test
     void rating_cust2Fair() {
         stubCust2();
-        assertThat(service.getHealth("CUST-000002").rating()).isEqualTo("FAIR");
+        assertThat(service.getHealth("CUST-000002", null, null).rating()).isEqualTo("FAIR");
     }
 
     @Test
     void rating_cust3Fair() {
         stubCust3Empty();
-        assertThat(service.getHealth("CUST-000003").rating()).isEqualTo("FAIR");
+        assertThat(service.getHealth("CUST-000003", null, null).rating()).isEqualTo("FAIR");
     }
 
     /**
@@ -277,7 +277,7 @@ class FinancialHealthServiceTest {
     @Test
     void ratingBoundary_fairBandPinnedAt50() {
         stubCust3Empty();
-        FinancialHealthResponse h = service.getHealth("CUST-000003");
+        FinancialHealthResponse h = service.getHealth("CUST-000003", null, null);
         assertThat(h.financialHealthScore()).isEqualTo(50);
         assertThat(h.rating()).isEqualTo("FAIR");
     }
@@ -289,9 +289,9 @@ class FinancialHealthServiceTest {
         stubCust1();
         stubCust2();
         stubCust3Empty();
-        assertThat(service.getHealth("CUST-000001").currency()).isEqualTo("GBP");
-        assertThat(service.getHealth("CUST-000002").currency()).isEqualTo("USD");
-        assertThat(service.getHealth("CUST-000003").currency()).isEqualTo("EUR");
+        assertThat(service.getHealth("CUST-000001", null, null).currency()).isEqualTo("GBP");
+        assertThat(service.getHealth("CUST-000002", null, null).currency()).isEqualTo("USD");
+        assertThat(service.getHealth("CUST-000003", null, null).currency()).isEqualTo("EUR");
     }
 
     @Test
@@ -303,7 +303,7 @@ class FinancialHealthServiceTest {
                 creditTxn("TXN-5002", "CUST-000001", "2500.00", USD)));
         when(creditStatusRepository.findByCustomerId("CUST-000001")).thenReturn(Optional.of(
                 creditStatus("CUST-000001", "18.50", "1200.00", GBP)));
-        assertThatThrownBy(() -> service.getHealth("CUST-000001"))
+        assertThatThrownBy(() -> service.getHealth("CUST-000001", null, null))
                 .isInstanceOf(InvalidRequestException.class);
     }
 
@@ -312,7 +312,7 @@ class FinancialHealthServiceTest {
     @Test
     void recommendations_cust1DebtOnly() {
         stubCust1();
-        List<String> recs = service.getHealth("CUST-000001").recommendations();
+        List<String> recs = service.getHealth("CUST-000001", null, null).recommendations();
         assertThat(recs).hasSize(1);
         assertThat(recs.get(0)).containsIgnoringCase("debt-to-income");
     }
@@ -320,7 +320,7 @@ class FinancialHealthServiceTest {
     @Test
     void recommendations_cust2DebtThenUtil() {
         stubCust2();
-        List<String> recs = service.getHealth("CUST-000002").recommendations();
+        List<String> recs = service.getHealth("CUST-000002", null, null).recommendations();
         assertThat(recs).hasSize(2);
         assertThat(recs.get(0)).containsIgnoringCase("debt-to-income");
         assertThat(recs.get(1)).containsIgnoringCase("utilization");
@@ -329,7 +329,7 @@ class FinancialHealthServiceTest {
     @Test
     void recommendations_cust3SavingsOnly() {
         stubCust3Empty();
-        List<String> recs = service.getHealth("CUST-000003").recommendations();
+        List<String> recs = service.getHealth("CUST-000003", null, null).recommendations();
         assertThat(recs).hasSize(1);
         assertThat(recs.get(0)).containsIgnoringCase("savings");
     }
@@ -344,7 +344,7 @@ class FinancialHealthServiceTest {
                 debitTxn("TXN-5001", "CUST-000001", "-100.00", GBP)));
         when(creditStatusRepository.findByCustomerId("CUST-000001")).thenReturn(Optional.of(
                 creditStatus("CUST-000001", "5.00", "100.00", GBP)));
-        List<String> recs = service.getHealth("CUST-000001").recommendations();
+        List<String> recs = service.getHealth("CUST-000001", null, null).recommendations();
         assertThat(recs).hasSize(1);
         assertThat(recs.get(0)).containsIgnoringCase("strong");
     }
@@ -359,7 +359,7 @@ class FinancialHealthServiceTest {
                 debitTxn("TXN-6001", "CUST-000002", "-950.00", USD)));
         when(creditStatusRepository.findByCustomerId("CUST-000002")).thenReturn(Optional.of(
                 creditStatus("CUST-000002", "90.00", "900.00", USD)));
-        List<String> recs = service.getHealth("CUST-000002").recommendations();
+        List<String> recs = service.getHealth("CUST-000002", null, null).recommendations();
         assertThat(recs).hasSizeLessThanOrEqualTo(3);
         assertThat(recs.get(0)).containsIgnoringCase("debt-to-income");
     }
@@ -369,7 +369,7 @@ class FinancialHealthServiceTest {
     @Test
     void disclaimerIsSyntheticConstant() {
         stubCust1();
-        assertThat(service.getHealth("CUST-000001").disclaimer()).isEqualTo(DtoMapper.SYNTHETIC_DISCLAIMER);
+        assertThat(service.getHealth("CUST-000001", null, null).disclaimer()).isEqualTo(DtoMapper.SYNTHETIC_DISCLAIMER);
     }
 
     // ---- BR-10 empty data (AC-15) ----------------------------------------------------------------
@@ -377,7 +377,7 @@ class FinancialHealthServiceTest {
     @Test
     void emptyDataCustomerReturnsNeutralValues() {
         stubCust3Empty();
-        FinancialHealthResponse h = service.getHealth("CUST-000003");
+        FinancialHealthResponse h = service.getHealth("CUST-000003", null, null);
         assertThat(h.monthlyIncome()).isEqualByComparingTo("0.00");
         assertThat(h.monthlyExpenses()).isEqualByComparingTo("0.00");
         assertThat(h.savingsRate()).isEqualByComparingTo("0.0000");
@@ -391,8 +391,8 @@ class FinancialHealthServiceTest {
     @Test
     void twoCallsAreDeterministic() {
         stubCust1();
-        FinancialHealthResponse a = service.getHealth("CUST-000001");
-        FinancialHealthResponse b = service.getHealth("CUST-000001");
+        FinancialHealthResponse a = service.getHealth("CUST-000001", null, null);
+        FinancialHealthResponse b = service.getHealth("CUST-000001", null, null);
         assertThat(a.monthlyIncome()).isEqualByComparingTo(b.monthlyIncome());
         assertThat(a.savingsRate()).isEqualByComparingTo(b.savingsRate());
         assertThat(a.debtToIncomeRatio()).isEqualByComparingTo(b.debtToIncomeRatio());
@@ -406,7 +406,7 @@ class FinancialHealthServiceTest {
     @Test
     void unknownCustomerThrowsNotFound() {
         when(customerRepository.findById("CUST-999999")).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.getHealth("CUST-999999"))
+        assertThatThrownBy(() -> service.getHealth("CUST-999999", null, null))
                 .isInstanceOf(CustomerNotFoundException.class);
     }
 
@@ -414,7 +414,151 @@ class FinancialHealthServiceTest {
     void dependencyFailurePropagates() {
         when(customerRepository.findById("CUST-000004"))
                 .thenThrow(new DependencyUnavailableException("customer-store"));
-        assertThatThrownBy(() -> service.getHealth("CUST-000004"))
+        assertThatThrownBy(() -> service.getHealth("CUST-000004", null, null))
                 .isInstanceOf(DependencyUnavailableException.class);
+    }
+
+    // ---- date-range scoping (run-gh-2; spec §4.1, AC-1/AC-3/AC-7, BR-SCOPE) ----------------------
+
+    private static final OffsetDateTime JAN_01 = OffsetDateTime.of(2025, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
+    private static final OffsetDateTime JAN_10 = OffsetDateTime.of(2025, 1, 10, 0, 0, 0, 0, ZoneOffset.UTC);
+    private static final OffsetDateTime Y2024_START = OffsetDateTime.of(2024, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
+    private static final OffsetDateTime Y2024_END = OffsetDateTime.of(2024, 12, 31, 0, 0, 0, 0, ZoneOffset.UTC);
+
+    /** Ada's three January transactions, as the fixtures define them (salary, groceries, interest). */
+    private Transaction adaSalary() {
+        return new Transaction("TXN-5002", "ACC-1001", "CUST-000001", new BigDecimal("2500.00"), GBP,
+                TransactionType.CREDIT, "SALARY", OffsetDateTime.of(2025, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), "Payroll");
+    }
+
+    private Transaction adaGroceries() {
+        return new Transaction("TXN-5001", "ACC-1001", "CUST-000001", new BigDecimal("-45.20"), GBP,
+                TransactionType.DEBIT, "GROCERIES", OffsetDateTime.of(2025, 1, 5, 0, 0, 0, 0, ZoneOffset.UTC), "Supermarket");
+    }
+
+    private Transaction adaInterest() {
+        return new Transaction("TXN-5003", "ACC-1002", "CUST-000001", new BigDecimal("250.75"), GBP,
+                TransactionType.CREDIT, "INTEREST", OffsetDateTime.of(2025, 1, 31, 0, 0, 0, 0, ZoneOffset.UTC), "Monthly interest");
+    }
+
+    /** Wires CUST-000001 profile/accounts/credit; the caller stubs the transaction range explicitly. */
+    private void stubCust1ProfileAccountsCredit() {
+        when(customerRepository.findById("CUST-000001")).thenReturn(Optional.of(customer("CUST-000001", GBP)));
+        when(accountRepository.findByCustomerId("CUST-000001")).thenReturn(List.of(account("ACC-1001", "CUST-000001", GBP)));
+        when(creditStatusRepository.findByCustomerId("CUST-000001")).thenReturn(Optional.of(
+                creditStatus("CUST-000001", "18.50", "1200.00", GBP)));
+    }
+
+    @Test
+    void scopedWindow_jan01ToJan10_derivesScopedFigures() {
+        // AC-1: [2025-01-01, 2025-01-10] selects salary + groceries (excludes Jan-31 interest).
+        stubCust1ProfileAccountsCredit();
+        when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", JAN_01, JAN_10))
+                .thenReturn(List.of(adaSalary(), adaGroceries()));
+
+        FinancialHealthResponse h = service.getHealth("CUST-000001", JAN_01, JAN_10);
+
+        assertThat(h.monthlyIncome()).isEqualByComparingTo("2500.00");
+        assertThat(h.monthlyExpenses()).isEqualByComparingTo("45.20");
+        assertThat(h.savingsRate()).isEqualByComparingTo("0.9819");
+        assertThat(h.debtToIncomeRatio()).isEqualByComparingTo("0.4800");
+        assertThat(h.financialHealthScore()).isEqualTo(81);
+        assertThat(h.rating()).isEqualTo("EXCELLENT");
+    }
+
+    @Test
+    void noBounds_matchesMergedFullHistoryFigures() {
+        // AC-2: unscoped default is byte-for-byte identical to merged full-history behaviour.
+        stubCust1();
+        FinancialHealthResponse h = service.getHealth("CUST-000001", null, null);
+        assertThat(h.monthlyIncome()).isEqualByComparingTo("2750.75");
+        assertThat(h.monthlyExpenses()).isEqualByComparingTo("45.20");
+        assertThat(h.savingsRate()).isEqualByComparingTo("0.9836");
+        assertThat(h.debtToIncomeRatio()).isEqualByComparingTo("0.4362");
+        assertThat(h.financialHealthScore()).isEqualTo(82);
+        assertThat(h.rating()).isEqualTo("EXCELLENT");
+    }
+
+    @Test
+    void fromOnly_jan10_scopesOpenEndedUpper() {
+        // AC-3: from=2025-01-10 only (to=null) selects the Jan-31 interest only.
+        stubCust1ProfileAccountsCredit();
+        when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", JAN_10, null))
+                .thenReturn(List.of(adaInterest()));
+
+        FinancialHealthResponse h = service.getHealth("CUST-000001", JAN_10, null);
+
+        assertThat(h.monthlyIncome()).isEqualByComparingTo("250.75");
+        assertThat(h.monthlyExpenses()).isEqualByComparingTo("0.00");
+        assertThat(h.savingsRate()).isEqualByComparingTo("1.0000");
+        assertThat(h.debtToIncomeRatio()).isEqualByComparingTo("4.7856");
+        assertThat(h.financialHealthScore()).isEqualTo(66);
+        assertThat(h.rating()).isEqualTo("GOOD");
+    }
+
+    @Test
+    void toOnly_jan10_scopesOpenEndedLower() {
+        // AC-3 (symmetric): to=2025-01-10 only (from=null) selects salary + groceries.
+        stubCust1ProfileAccountsCredit();
+        when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", null, JAN_10))
+                .thenReturn(List.of(adaSalary(), adaGroceries()));
+
+        FinancialHealthResponse h = service.getHealth("CUST-000001", null, JAN_10);
+
+        assertThat(h.monthlyIncome()).isEqualByComparingTo("2500.00");
+        assertThat(h.savingsRate()).isEqualByComparingTo("0.9819");
+    }
+
+    @Test
+    void emptyRange_all2024_yieldsZeroFiguresPoor() {
+        // AC-7: a valid range selecting zero transactions → zero figures, DTI sentinel 9.9999, POOR.
+        stubCust1ProfileAccountsCredit();
+        when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", Y2024_START, Y2024_END))
+                .thenReturn(List.of());
+
+        FinancialHealthResponse h = service.getHealth("CUST-000001", Y2024_START, Y2024_END);
+
+        assertThat(h.monthlyIncome()).isEqualByComparingTo("0.00");
+        assertThat(h.monthlyExpenses()).isEqualByComparingTo("0.00");
+        assertThat(h.savingsRate()).isEqualByComparingTo("0.0000");
+        assertThat(h.debtToIncomeRatio()).isEqualByComparingTo("9.9999");
+        assertThat(h.financialHealthScore()).isEqualTo(16);
+        assertThat(h.rating()).isEqualTo("POOR");
+    }
+
+    @Test
+    void fromAfterTo_throwsInvalidRequestFieldFrom() {
+        // AC-4: the from<=to guard lives in TransactionService and propagates unchanged (field="from").
+        // getHealth resolves profile then accounts before the transaction call throws; those two stubs
+        // are reached, the transaction/credit stubs are not, so only the reached ones are wired.
+        when(customerRepository.findById("CUST-000001")).thenReturn(Optional.of(customer("CUST-000001", GBP)));
+        when(accountRepository.findByCustomerId("CUST-000001")).thenReturn(List.of(account("ACC-1001", "CUST-000001", GBP)));
+        assertThatThrownBy(() -> service.getHealth("CUST-000001", JAN_10, JAN_01))
+                .isInstanceOf(InvalidRequestException.class)
+                .extracting("field").isEqualTo("from");
+    }
+
+    @Test
+    void scopedWindow_onSingleCurrencyCustomer_returnsNormally() {
+        // R5 / BR-7: scoping a single-currency customer never spuriously fires the currency invariant.
+        stubCust1ProfileAccountsCredit();
+        when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", JAN_01, JAN_10))
+                .thenReturn(List.of(adaSalary(), adaGroceries()));
+        FinancialHealthResponse h = service.getHealth("CUST-000001", JAN_01, JAN_10);
+        assertThat(h.currency()).isEqualTo("GBP");
+    }
+
+    @Test
+    void scopedResponse_hasMoneyScale2AndRatioScale4() {
+        // AC-11: money fields scale 2, ratio fields scale 4, explicit currency.
+        stubCust1ProfileAccountsCredit();
+        when(transactionRepository.findByCustomerIdAndDateRange("CUST-000001", JAN_01, JAN_10))
+                .thenReturn(List.of(adaSalary(), adaGroceries()));
+        FinancialHealthResponse h = service.getHealth("CUST-000001", JAN_01, JAN_10);
+        assertThat(h.monthlyIncome().scale()).isEqualTo(2);
+        assertThat(h.monthlyExpenses().scale()).isEqualTo(2);
+        assertThat(h.savingsRate().scale()).isEqualTo(4);
+        assertThat(h.debtToIncomeRatio().scale()).isEqualTo(4);
+        assertThat(h.currency()).isEqualTo("GBP");
     }
 }

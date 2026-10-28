@@ -14,7 +14,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.List;
 
+import org.mockito.ArgumentCaptor;
+
+import java.time.OffsetDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -55,7 +64,7 @@ class FinancialHealthControllerTest {
 
     @Test
     void returns200WithHealthBody() throws Exception {
-        when(healthService.getHealth("CUST-000001")).thenReturn(sampleHealth());
+        when(healthService.getHealth(eq("CUST-000001"), isNull(), isNull())).thenReturn(sampleHealth());
         mockMvc.perform(get("/api/v1/customers/CUST-000001/financial-health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.customerId").value("CUST-000001"))
@@ -68,7 +77,7 @@ class FinancialHealthControllerTest {
 
     @Test
     void delegatesToServiceWithoutLogic() throws Exception {
-        when(healthService.getHealth("CUST-000001")).thenReturn(sampleHealth());
+        when(healthService.getHealth(eq("CUST-000001"), isNull(), isNull())).thenReturn(sampleHealth());
         mockMvc.perform(get("/api/v1/customers/CUST-000001/financial-health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.monthlyIncome").value("2750.75"))
@@ -84,7 +93,7 @@ class FinancialHealthControllerTest {
 
     @Test
     void returns404ForUnknownCustomer() throws Exception {
-        when(healthService.getHealth("CUST-999999"))
+        when(healthService.getHealth(eq("CUST-999999"), isNull(), isNull()))
                 .thenThrow(new CustomerNotFoundException("CUST-999999"));
         mockMvc.perform(get("/api/v1/customers/CUST-999999/financial-health"))
                 .andExpect(status().isNotFound())
@@ -114,7 +123,7 @@ class FinancialHealthControllerTest {
 
     @Test
     void returns503ForDependencyFailure() throws Exception {
-        when(healthService.getHealth(anyString()))
+        when(healthService.getHealth(anyString(), isNull(), isNull()))
                 .thenThrow(new DependencyUnavailableException("customer-store"));
         mockMvc.perform(get("/api/v1/customers/CUST-000004/financial-health"))
                 .andExpect(status().isServiceUnavailable())
@@ -123,7 +132,7 @@ class FinancialHealthControllerTest {
 
     @Test
     void returns400OnInvalidRequestCurrency() throws Exception {
-        when(healthService.getHealth(anyString()))
+        when(healthService.getHealth(anyString(), isNull(), isNull()))
                 .thenThrow(new InvalidRequestException("customer data currency is inconsistent", "currency"));
         mockMvc.perform(get("/api/v1/customers/CUST-000001/financial-health"))
                 .andExpect(status().isBadRequest())
@@ -132,11 +141,59 @@ class FinancialHealthControllerTest {
 
     @Test
     void errorBodyHasNoStackTrace() throws Exception {
-        when(healthService.getHealth("CUST-999999"))
+        when(healthService.getHealth(eq("CUST-999999"), isNull(), isNull()))
                 .thenThrow(new CustomerNotFoundException("CUST-999999"));
         mockMvc.perform(get("/api/v1/customers/CUST-999999/financial-health"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Exception"))))
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("at com.example.fintech"))));
+    }
+
+    // ---- date-range scoping (run-gh-2; AC-1, AC-4, AC-5) -----------------------------------------
+
+    @Test
+    void getHealth_withFromTo_returns200AndForwardsBounds() throws Exception {
+        // AC-1: the controller binds from/to and forwards the exact bounds to the service (no logic).
+        when(healthService.getHealth(eq("CUST-000001"), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .thenReturn(sampleHealth());
+
+        mockMvc.perform(get("/api/v1/customers/CUST-000001/financial-health")
+                        .param("from", "2025-01-01T00:00:00Z")
+                        .param("to", "2025-01-10T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$.customerId").value("CUST-000001"));
+
+        ArgumentCaptor<OffsetDateTime> fromCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<OffsetDateTime> toCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(healthService).getHealth(eq("CUST-000001"), fromCaptor.capture(), toCaptor.capture());
+        assertThat(fromCaptor.getValue()).isEqualTo(OffsetDateTime.parse("2025-01-01T00:00:00Z"));
+        assertThat(toCaptor.getValue()).isEqualTo(OffsetDateTime.parse("2025-01-10T00:00:00Z"));
+    }
+
+    @Test
+    void malformedFrom_returns400InvalidRequestFieldFrom() throws Exception {
+        // AC-5 / E2: binding fails before the service is reached → 400 problem naming the parameter.
+        mockMvc.perform(get("/api/v1/customers/CUST-000001/financial-health")
+                        .param("from", "not-a-date"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.type").value("urn:fintech:error:invalid-request"))
+                .andExpect(jsonPath("$.field").value("from"));
+    }
+
+    @Test
+    void fromAfterTo_returns400InvalidRequestFieldFrom() throws Exception {
+        // AC-4: service throws InvalidRequestException(field="from"); handler maps to 400 problem.
+        when(healthService.getHealth(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .thenThrow(new InvalidRequestException("'from' must be before or equal to 'to'", "from"));
+
+        mockMvc.perform(get("/api/v1/customers/CUST-000001/financial-health")
+                        .param("from", "2025-02-01T00:00:00Z")
+                        .param("to", "2025-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.type").value("urn:fintech:error:invalid-request"))
+                .andExpect(jsonPath("$.field").value("from"));
     }
 }
