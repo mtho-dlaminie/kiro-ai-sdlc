@@ -57,4 +57,35 @@ class FinancialHealthOpenApiIT {
                 .contains("\"503\"");
         assertThat(body).containsIgnoringCase("synthetic");
     }
+
+    @Test
+    void operationDocumentsFromAndToParams() throws Exception {
+        // AC-10: the financial-health operation lists from and to query params with descriptions +
+        // ISO-8601 examples. Parse the OpenAPI JSON and inspect the operation's parameters precisely.
+        ResponseEntity<String> response = client().get()
+                .uri("/v3/api-docs")
+                .retrieve().toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        com.fasterxml.jackson.databind.JsonNode root =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.getBody());
+        com.fasterxml.jackson.databind.JsonNode params = root
+                .path("paths")
+                .path("/api/v1/customers/{customerId}/financial-health")
+                .path("get")
+                .path("parameters");
+        assertThat(params.isArray()).isTrue();
+
+        java.util.Map<String, com.fasterxml.jackson.databind.JsonNode> byName = new java.util.HashMap<>();
+        params.forEach(p -> byName.put(p.path("name").asText(), p));
+
+        assertThat(byName).containsKeys("from", "to");
+        for (String name : new String[] {"from", "to"}) {
+            com.fasterxml.jackson.databind.JsonNode p = byName.get(name);
+            assertThat(p.path("in").asText()).isEqualTo("query");
+            assertThat(p.path("required").asBoolean(true)).isFalse();
+            assertThat(p.path("description").asText()).isNotBlank();
+            assertThat(p.path("description").asText()).contains("2025-01");
+        }
+    }
 }

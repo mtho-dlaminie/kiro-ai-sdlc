@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
@@ -69,12 +70,20 @@ public class FinancialHealthService {
         this.creditStatusService = creditStatusService;
     }
 
-    public FinancialHealthResponse getHealth(String customerId) {
+    /**
+     * Derives the financial-health view, optionally scoped to an inclusive {@code [from, to]} window.
+     * Either bound may be {@code null} (open-ended on that side); both {@code null} is the unscoped
+     * full-history default. The range is threaded through the existing range-aware
+     * {@link TransactionService}, which enforces {@code from <= to}; all scoring (BR-1..BR-8) is applied
+     * unchanged to the scoped transaction subset. Accounts and credit status are point-in-time balances
+     * and are not date-scoped.
+     */
+    public FinancialHealthResponse getHealth(String customerId, OffsetDateTime from, OffsetDateTime to) {
         Customer profile = profileService.getProfile(customerId);
         Currency profileCurrency = profile.currency();
 
         List<Account> accounts = accountService.getAccounts(customerId);
-        List<Transaction> transactions = transactionService.getTransactions(customerId, null, null);
+        List<Transaction> transactions = transactionService.getTransactions(customerId, from, to);
         CreditStatus credit = creditStatusService.getCreditStatus(customerId);
 
         assertSingleCurrency(profileCurrency, accounts, transactions, credit);
